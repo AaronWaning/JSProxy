@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE project [<!ENTITY common SYSTEM "common.xml">]>
+<project default="release" basedir=".">
+	<echo>-------------参数设置---------------------</echo>
+	<!--projectName:工程名,value是可配置参数-->
+	<property name="projectName" value="JSProxy" />
+	
+	<!--project_build:工程build文件夹-->
+	<property name="project_build" location="binary" />
+	
+	<!--documents_path:系统部署说明书路径-->
+	<property name="documents_path" location="doc" />
+		
+	<!--documents_name:系统部署说明书名称-->
+	<property name="documents_name" value="山海易绘EzSearchService全文搜索产品接口说明.docx" />
+	<property name="documents_name" value="山海易绘EzSearchService全文搜索服务部署说明书.docx" />
+	<echo>-------------编译开始---------------------</echo>
+	<property name="build_documents" location="${documents_path}/${documents_name}" />
+
+	<!--project_src:工程src文件夹-->
+	<property name="project_src" location="src" />
+	<property name="mainclass" value="com.easymap.setup.main.MainFace"/>
+
+	<!--project_lib:工程lib文件夹-->
+	<property name="project_lib" location="lib" />
+
+	<!--project_webContent:工程WebContent文件夹-->
+	<!--property name="project_webContent" location="WebContent" /-->
+
+	<!--ant_init：初始化 -->
+	<target name="ant_init" description="建立需要使用的临时ANT任务">
+		<property name="ant_workdir" location="deploy" />
+		<property name="ant_lib" location="ant_lib" />
+
+		<delete dir="${ant_workdir}" />
+		<mkdir dir="${ant_workdir}" />
+		
+		<property name="proguard" location="${ant_lib}/proguard" />
+		<taskdef resource="proguard/ant/task.properties" classpath="${proguard}/proguard.jar" />
+
+		<taskdef resource="net/sf/antcontrib/antlib.xml">
+			<classpath>
+				<fileset dir="${ant_lib}" includes="*.jar" />
+			</classpath>
+		</taskdef>
+		<antcallback antfile="${ant_lib}/version_help.ant" target="getVersion" return="ver.version,ver.releaseInfo,ver.releaseInfos">
+			<property name="version_src_dir" location="src" />
+			<property name="version_classname" value="com.server.Version" />
+		</antcallback>
+		<echo>------ANT 初始化任务，获得当前发布产品版本信息：${ver.version}------</echo>
+		
+		
+		<echo>------ANT 初始化任务，额外信息初始化------</echo>
+		<!--project_prop:工程prop文件夹-->
+		<property name="project_prop" location="prop" />
+		
+		<!--value是可配置参数，如果含有属性文件，则此处的value设置为ture，否则设置为false-->
+		<condition property="has_prop">
+		    <istrue value="false" />
+		</condition>
+	</target>
+
+	<!--build_app：建立项目 -->
+	<target name="build_app" depends="ant_init">
+		<property name="build_workdir" location="${ant_workdir}/build/" />
+		<property name="build_project_root" location="${build_workdir}/${projectName}" />
+		<property name="ant_classes" location="${build_project_root}/WEB-INF/classes/" />
+		<property name="build_project_jar" location="${build_project_root}/WEB-INF/lib/${projectName}.${ver.version}.jar" />
+		
+		<mkdir dir="${build_project_root}" />
+		<!--拷贝webContent-->
+		<!--copy todir="${build_project_root}">
+			<fileset dir="${project_webContent}" />
+		</copy-->
+		
+		<!--如果有配置文件，拷贝属性文件-->
+		<antcall target="get_proporties"></antcall>
+
+		<!-- 拷贝系统类库 -->
+		<copy todir="${build_project_root}/WEB-INF/lib" flatten="true">
+			<fileset dir="${project_lib}" casesensitive="false">
+				<patternset>
+					<include name="**/*.jar" />
+					<exclude name="**/servlet-api*.jar" />
+				</patternset>
+			</fileset>
+		</copy>
+
+		<!-- 建立环境 -->
+		<property name="ant_temp" location="${ant_workdir}/temp" />
+		<property name="proguard_complile" location="${ant_temp}/proguard"></property>
+		<property name="packed_normal_jar" location="${proguard_complile}/${projectName}.normal.${ver.version}.jar" />
+		<property name="packed_confuse_jar" location="${proguard_complile}/${projectName}.confuse.${ver.version}.jar" />
+		<delete dir="${ant_temp}" />
+		<mkdir dir="${ant_temp}" />
+		<copy todir="${ant_temp}" overwrite="yes" failonerror="yes">
+			<fileset dir="${project_src}" excludes="**/*.java" />
+		</copy>
+
+		<!-- 编译 -->
+		<path id="build.lib.path">
+			<fileset dir="${project_lib}" includes="**/*.jar" />
+		</path>
+		<javac encoding="gbk" destdir="${ant_temp}" target="1.6" nowarn="yes" classpathref="build.lib.path">
+			<src path="${project_src}" />
+		</javac>
+
+		<!-- 打包 -->
+		<mkdir dir="${proguard_complile}" />
+		<jar jarfile="${packed_normal_jar}" basedir="${ant_temp}">
+			<manifest>
+				<attribute name="Main-Class" value="${mainclass}" />
+				<attribute name="Class-Path" value="ojdbc14.jar" />
+			</manifest>
+		</jar>
+		
+		<!-- 混淆 -->
+		<proguard>
+			-injars  ${packed_normal_jar}
+			-outjars ${packed_confuse_jar}
+			-libraryjars "${java.home}/lib/";"${project_lib}"
+			-include ${proguard}/annotations.pro
+		</proguard>
+		
+		<!-- 复制到WEB中 -->
+		<copy tofile="${build_project_jar}" file="${packed_normal_jar}"></copy>
+
+		<!-- 拆除环境 -->
+		<delete dir="${ant_temp}" />
+	</target>
+
+	<!--第三步：发布 -->
+	<target name="release" depends="build_app">
+
+		<!--release_zip：整包带版本号的路径-->
+		<property name="release_zip" location="${project_build}/${projectName}_${ver.version}.bin.zip" />
+
+		<!--release_win32：散包路径>
+		<property name="release_win32" location="../../Release/${projectName}" />-->
+
+		<!--assem_workdir：组装目录-->
+		<property name="assem_workdir" location="${ant_workdir}/assem/" />
+
+		<!--assem_app_zip：组装zip文件路径-->
+		<property name="assem_app_zip" location="${assem_workdir}/${projectName}.zip" />
+
+		<!--assem_app_readme：组装时，系统部署说明书路径-->
+		<property name="assem_app_build_documents" location="${assem_workdir}/${documents_name}" />
+		<!--assem_app_db：组装时，系统数据库脚本路径-->
+		<property name="assem_app_db" location="${assem_workdir}/database/"></property>
+
+		<mkdir dir="${assem_workdir}" />
+
+		<!-- 压缩WEB -->
+		<zip destfile="${assem_app_zip}" encoding="GBK" level="9" keepcompression="true" basedir="${build_project_root}" />
+
+		<!-- 安装配置文档 -->
+		<copy tofile="${assem_app_build_documents}" file="${build_documents}" />
+		
+
+		<!--发布到发布目录中-->
+		<delete file="${release_zip}" />
+		<zip destfile="${release_zip}" encoding="GBK" level="0" keepcompression="true" basedir="${assem_workdir}" />
+		<!--delete dir="${release_win32}" />
+		<copy todir="${release_win32}" flatten="false">
+			<fileset dir="${build_project_root}" />
+		</copy-->
+
+		<!-- 发送消息 通知编译人员完成编译 -->
+		<echo>----------编译完成，版本: ${ver.version}---------</echo>
+		<echo>-------------编译结束---------------------</echo>
+	</target>
+	
+	<!--获取系统额外需要的属性信息-->
+	<target name="get_proporties" if="has_prop">
+		<copy todir="${ant_classes}">
+			<fileset dir="${project_prop}" />
+		</copy>
+	</target>
+	
+</project>

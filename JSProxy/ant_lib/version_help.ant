@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE project [<!ENTITY common SYSTEM "common.xml">]>
+<project name="version_help" basedir="..">
+	<property name="java_class_temp_dir" location="deploy/antbuildversion/" />
+	<property name="script_lib_path" location="ant_lib"></property>
+	
+	<property name="version_src_dir" location="src" />
+	<property name="version_classname" value="" />
+	
+	<target name="CompileClasses" description="编译版本相关类">
+		<mkdir dir="${java_class_temp_dir}"/>
+				
+		<script language="groovy">
+			<classpath>
+	    		<fileset dir="${script_lib_path}" includes="**/*.jar"></fileset>
+	    	</classpath>
+			<![CDATA[
+				// calc file system location of the version related classes 
+				def version_classname = CompileClasses.getProject().getProperty("version_classname");
+				def version_path = "";
+				int classNameIndex = version_classname.lastIndexOf(".");
+				version_path = version_classname.substring(0,classNameIndex);
+				version_path = version_path.replaceAll("\\.","/") + "/*.java";
+		    	
+				CompileClasses.getProject().setProperty("version_path",version_path);
+	    	]]> 
+		</script>
+		
+		<javac srcdir="${version_src_dir}" encoding="GBK" destdir="${java_class_temp_dir}" includes="${version_path}">
+			<classpath>
+	    		<fileset dir="${script_lib_path}" includes="**/*.jar"></fileset>
+	    	</classpath>
+		</javac>
+	</target>
+	
+	<target name="getVersion" depends="CompileClasses" description="这个函数任务，可以实现将版本返回给 ver.version,ver.releaseInfo,ver.releaseInfos属性">
+		<script language="groovy">
+	  		<classpath>
+	    		<fileset dir="${script_lib_path}" includes="**/*.jar"></fileset>
+	  			<dirset dir="${java_class_temp_dir}" includes="**"></dirset>
+	    	</classpath>
+			<![CDATA[
+				import java.lang.reflect.*;
+				
+				def java_version_classname = getVersion.getProject().getProperty("version_classname");
+				def java_version_class = Class.forName(java_version_classname);
+				
+				Method method_getVersion = java_version_class.getMethod("getVersion",new Class[0]);
+				def ver_version = method_getVersion.invoke(null);
+				getVersion.getProject().setProperty("ver.version",ver_version);
+				
+				Method method_getReleaseInfo = java_version_class.getMethod("getReleaseInfo",Boolean.class);
+				def ver_releaseInfo = method_getReleaseInfo.invoke(null,new Boolean(true));
+				getVersion.getProject().setProperty("ver.releaseInfo",ver_releaseInfo);
+			
+				def ver_releaseInfos = method_getReleaseInfo.invoke(null,new Boolean(false));
+				getVersion.getProject().setProperty("ver.releaseInfos",ver_releaseInfos);
+	    	]]> 
+		</script>
+	</target>
+	
+</project>
